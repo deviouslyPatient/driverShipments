@@ -54,14 +54,6 @@ class MainActivity : AppCompatActivity() {
     private fun setupObservers() {
         binding.progressBar.visibility = View.VISIBLE
         binding.recyclerView.visibility = View.GONE
-//        driverViewModel
-//            .getDrivers()
-//            .observe(this, {
-//                binding.progressBar.visibility = View.GONE
-//                binding.recyclerView.visibility = View.VISIBLE
-//                driverShipmentAdapter.addData(it)
-//                driverShipmentAdapter::notifyDataSetChanged
-//            })
         driverViewModel
             .getCombinations()
             .observe(this, {

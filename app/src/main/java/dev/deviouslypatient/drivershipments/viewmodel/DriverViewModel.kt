@@ -4,7 +4,7 @@ import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.ViewModel
 import dev.deviouslypatient.drivershipments.data.DataService
-import dev.deviouslypatient.drivershipments.model.Combination
+import dev.deviouslypatient.drivershipments.model.Assignment
 import dev.deviouslypatient.drivershipments.model.SuitabilityEngine
 import io.reactivex.rxjava3.android.schedulers.AndroidSchedulers
 import io.reactivex.rxjava3.disposables.CompositeDisposable
@@ -17,11 +17,11 @@ class DriverViewModel(
     val suitabilityEngine: SuitabilityEngine
     ): ViewModel() {
     private val compositeDisposable = CompositeDisposable()
-    private val combinations: MutableLiveData<Array<Combination>> by lazy {
-        MutableLiveData<Array<Combination>>().also { getDriversAndShipments() }
+    private val combinations: MutableLiveData<List<Assignment>> by lazy {
+        MutableLiveData<List<Assignment>>().also { getDriversAndShipments() }
     }
 
-    fun getCombinations(): LiveData<Array<Combination>> {
+    fun getCombinations(): LiveData<List<Assignment>> {
         return combinations
     }
 
@@ -39,8 +39,7 @@ class DriverViewModel(
                             .subscribeOn(Schedulers.io())
                             .observeOn(AndroidSchedulers.mainThread())
                             .subscribe({ combos ->
-                                // todo fix this mix of collection types
-                                combinations.postValue(combos.toTypedArray())
+                                combinations.postValue(combos)
                             },{
                                 Timber.e(it, "Error retrieving most suitable combinations")
                             })

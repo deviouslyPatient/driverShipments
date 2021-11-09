@@ -5,100 +5,122 @@ import timber.log.Timber
 import java.lang.Exception
 
 /*
-The top-secret algorithm is:
-If the length of the shipment's destination street name is even, the base suitability score (SS) is
-    the number of vowels in the driver’s name multiplied by 1.5.
-If the length of the shipment's destination street name is odd, the base SS is the number of
-    consonants in the driver’s name multiplied by 1.
-If the length of the shipment's destination street name shares any common factors (besides 1)
-    with the length of the driver’s name, the SS is increased by 50% above the base SS.
- */
-
-/*
 Thoughts:
-if you only have one shipment and one driver, that must be the best combination
-if you only have one shipment and multiple drivers, the best combination is with the driver with the highest sus score
-if you only have one driver and multiple shipments, the best combination is with the shipment with the highest sus score
-once you have multiple drivers and multiple shipments, it has to become some kind of dynamic programming example
-It's a 2D matrix of values, with every combination of driver and shipment
-Then we have to figure out the best set of combinations
+I went through a lot of different approaches to this trying to consider what kind of data structures
+would be the best for generating the permutations, whether it would be more performant to create a
+data class for the drivers so that I would only have to compute the number of vowels and consonants
+once, and whether or not a recursive function was the best idea. If I had more time I would have
+liked to do more research and maybe taken some performance metrics on different approaches.
+
+Potential issues with this approach:
+if there are ever drivers with the same name, or shipments with the same destination then only one
+will be considered
  */
 class DefaultSuitabilityEngine: SuitabilityEngine {
-    private val bestCombinations: ArrayList<Combination> = arrayListOf()
+     var bestAssignmentsScore: Double = 0.0
+     var bestAssignments: List<Assignment> = listOf()
 
     override fun getDriverShipmentAssignments(
-        driverNames: Array<String>,
-        shipmentDestinations: Array<String>
-    ): Single<ArrayList<Combination>> {
+        driverNames: List<String>,
+        shipmentDestinations: List<String>
+    ): Single<List<Assignment>> {
         return Single.create { emitter ->
             try {
-                createAllCombinations(driverNames, shipmentDestinations)
-                emitter.onSuccess(bestCombinations)
+                calculateSuitabilityMap(driverNames, shipmentDestinations)
+                emitter.onSuccess(bestAssignments)
             } catch (e: Exception) {
-                Timber.e(e, "Error calculating the most suitable combinations")
+                Timber.e(e, "Error calculating the most suitable shipment assignments")
                 emitter.onError(e)
             }
-
         }
     }
 
-    fun createAllCombinations(driverNames: Array<String>, shipmentDestinations: Array<String>) {
-        val drivers: ArrayList<Driver> = arrayListOf()
-        val shipments: ArrayList<Shipment> = arrayListOf()
+    fun calculateSuitabilityMap(driverNames:List<String>, shipmentDestinations: List<String>) {
+        val suitabilityMap: MutableMap<Pair<String, String>, Double> = mutableMapOf()
 
-        // this would be an easy place to sanitize data, remove drivers or shipments that are empty strings
-        driverNames.forEach{ drivers.add(Driver(it))}
-        shipmentDestinations.forEach { shipments.add(Shipment(it)) }
-
-        val combos: ArrayList<ArrayList<Combination>> = arrayListOf()
-        drivers.forEach { driver ->
-            val row: ArrayList<Combination> = arrayListOf()
-            shipments.forEach { shipment ->
-                row.add(createCombination(driver, shipment))
+        driverNames.forEach { driver ->
+            shipmentDestinations.forEach {  shipment ->
+                val key = Pair(driver, shipment)
+                suitabilityMap[key] = calculateSuitabilityScore(driver, shipment)
             }
-            combos.add(row)
         }
-        bestCombinations.clear()
-        determineBestCombinations(combos)
+        Timber.d("Map of suitability scores $suitabilityMap")
+        bestAssignments = emptyList()
+        bestAssignmentsScore = 0.0
+        comparePermutations(driverNames, shipmentDestinations, suitabilityMap, emptyList())
+        Timber.d("Best permutation $bestAssignments  $bestAssignmentsScore")
     }
 
-    fun determineBestCombinations(suitabilityScores: ArrayList<ArrayList<Combination>>) {
-        //todo figure out something better than this really dumb approach
-        if (suitabilityScores.size == 0) return
-        if (suitabilityScores[0].size == 0) {
-            // more drivers than shipments
-            suitabilityScores.forEach { row ->
-                bestCombinations.add(Combination(row[0].driver, null, 0.0))
+    private fun comparePermutations(
+        drivers: List<String>,
+        shipments: List<String>,
+        suitabilityMap: Map<Pair<String, String>, Double>,
+        permutationSoFar: List<Assignment>
+    ) {
+        // no more options to consider -  we have a permutation
+        if (suitabilityMap.isEmpty() || drivers.isEmpty() || shipments.isEmpty()) {
+            if (drivers.isNotEmpty()) {
+                // add any drivers who may not have been assigned a shipment
+                drivers.forEach {
+                    permutationSoFar.plus(Assignment(it, null, 0.0))
+                }
             }
+            val permutationScore = permutationSoFar.sumOf { it.suitibilityScore }
+            if (permutationScore > bestAssignmentsScore) {
+                bestAssignments = permutationSoFar
+                bestAssignmentsScore = permutationScore
+            }
+            Timber.d("Current Permutation $permutationSoFar $permutationScore")
             return
         }
 
-        val bestScore = suitabilityScores[0].maxOf { it.suitibilityScore }
-        val index = suitabilityScores[0].indexOfFirst { it.suitibilityScore == bestScore }
-        val bestCombination = suitabilityScores[0][index]
-        bestCombinations.add(bestCombination)
-        suitabilityScores.removeAt(0)
-        suitabilityScores.forEach { col -> col.removeIf { it.shipment == bestCombination.shipment } }
-        determineBestCombinations(suitabilityScores)
-    }
-    private fun createCombination(driver: Driver, shipment: Shipment): Combination {
-        return Combination(driver, shipment, calculateSuitabilityScore(driver, shipment))
+        // keep building up the assignments in the current permutation of assignments
+        if (drivers.size > shipments.size) {
+            val selectedShipment = shipments[0]
+            drivers.forEach { driver ->
+                val score = suitabilityMap[Pair(driver, selectedShipment)] ?: 0.0
+                comparePermutations(
+                    drivers.filter { it != driver },
+                    shipments.filter { it != selectedShipment },
+                    suitabilityMap.filter { it.key.first != driver && it.key.second != selectedShipment },
+                    permutationSoFar.plus(Assignment(driver, selectedShipment, score))
+                )
+            }
+        } else {
+            val selectedDriver = drivers[0]
+            shipments.forEach { shipment ->
+                val score = suitabilityMap[Pair(selectedDriver, shipment)] ?: 0.0
+                comparePermutations(
+                    drivers.filter { it != selectedDriver },
+                    shipments.filter { it != shipment },
+                    suitabilityMap.filter { it.key.first != selectedDriver && it.key.second != shipment },
+                    permutationSoFar.plus(Assignment(selectedDriver, shipment, score))
+                )
+            }
+        }
     }
 
-    private fun calculateSuitabilityScore(driver: Driver, shipment: Shipment): Double {
-        var baseSuitability = if (shipment.numberOfLetters % 2 == 0) {
-            driver.numberOfVowels * 1.5
+    /*
+    The top-secret algorithm is:
+    If the length of the shipment's destination street name is even, the base suitability score (SS)
+        is the number of vowels in the driver’s name multiplied by 1.5.
+    If the length of the shipment's destination street name is odd, the base SS is the number of
+        consonants in the driver’s name multiplied by 1.
+    If the length of the shipment's destination street name shares any common factors (besides 1)
+        with the length of the driver’s name, the SS is increased by 50% above the base SS.
+     */
+    private fun calculateSuitabilityScore(driver: String, shipment: String): Double {
+        val driverVowels = EvaluationFunctions.numberOfVowels(driver)
+        val driverConsonants = EvaluationFunctions.numberOfConsonants(driver)
+
+        var baseSuitability = if (shipment.length %2 == 0) {
+            driverVowels * 1.5
         } else {
-            driver.numberOfConsonants * 1.0
+            driverConsonants * 1.0
         }
-        if (sharesCommonFactors(shipment.numberOfLetters, driver.numberOfLetters)) {
+        if (EvaluationFunctions.greatestCommonDivisor(shipment.length, driver.length) > 1 ) {
             baseSuitability *= 1.5
         }
         return baseSuitability
     }
-
-    private fun sharesCommonFactors(a: Int, b: Int): Boolean {
-        return EvaluationFunctions.greatestCommonDivisor(a, b) > 1
-    }
-
 }

@@ -8,8 +8,8 @@ import timber.log.Timber
 // This DefaultDataRepository just holds data in memory, other implementations could be backed by
 // databases or other data storage paradigms
 class DefaultDataRepository(private val dataService: DataService): DataRepository {
-    private var drivers: Array<String> = emptyArray()
-    private var shipments: Array<String> = emptyArray()
+    private var drivers: List<String> = listOf()
+    private var shipments: List<String> = listOf()
 
     override fun retrieveData(): Completable {
         return Completable.create { emitter ->
@@ -19,7 +19,7 @@ class DefaultDataRepository(private val dataService: DataService): DataRepositor
                 .observeOn(Schedulers.io())
                 .subscribe(
                     { data ->
-                        Timber.d("Data returned with drivers: ${data.drivers.contentToString()} and shipments: ${data.shipments.contentToString()}")
+                        Timber.d("Data returned with drivers: ${data.drivers} and shipments: ${data.shipments}")
                         drivers = data.drivers
                         shipments = data.shipments
                         emitter.onComplete()
@@ -32,11 +32,11 @@ class DefaultDataRepository(private val dataService: DataService): DataRepositor
         }
     }
 
-    override fun getDrivers(): Single<Array<String>> {
+    override fun getDrivers(): Single<List<String>> {
         return Single.just(drivers)
     }
 
-    override fun getShipments(): Single<Array<String>> {
+    override fun getShipments(): Single<List<String>> {
         return Single.just(shipments)
     }
 }

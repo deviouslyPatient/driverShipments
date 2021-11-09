@@ -8,6 +8,6 @@ import io.reactivex.rxjava3.core.Single
 // updated to limit disk reads/network traffic and hold data readily available in memory
 interface DataRepository {
     fun retrieveData(): Completable
-    fun getDrivers(): Single<Array<String>>
-    fun getShipments(): Single<Array<String>>
+    fun getDrivers(): Single<List<String>>
+    fun getShipments(): Single<List<String>>
 }

@@ -1,6 +1,6 @@
 package dev.deviouslypatient.drivershipments.model
 
-data class Combination(
-    val driver: Driver,
-    val shipment: Shipment?,
+data class Assignment(
+    val driver: String,
+    val shipment: String?,
     val suitibilityScore: Double)

@@ -2,7 +2,9 @@ package dev.deviouslypatient.drivershipments
 
 import androidx.appcompat.app.AppCompatActivity
 import android.os.Bundle
+import dev.deviouslypatient.drivershipments.data.DataRepository
 import dev.deviouslypatient.drivershipments.data.DataService
+import dev.deviouslypatient.drivershipments.data.DefaultDataRepository
 import dev.deviouslypatient.drivershipments.data.JsonDataService
 import io.reactivex.rxjava3.android.schedulers.AndroidSchedulers
 import io.reactivex.rxjava3.schedulers.Schedulers
@@ -16,15 +18,17 @@ class MainActivity : AppCompatActivity() {
 
     override fun onStart() {
         super.onStart()
-        // todo change this to be an injected DataService
+        // todo change this to use an injected DataRepository
+        // This will load the data every time the Main Activity is started
         val dataService: DataService = JsonDataService(this.applicationContext)
-        dataService
+        val dataRepository: DataRepository = DefaultDataRepository(dataService)
+        dataRepository
             .retrieveData()
             .subscribeOn(Schedulers.io())
             .observeOn(AndroidSchedulers.mainThread())
             .subscribe(
-                { data ->
-                    Timber.d("Data returned with drivers: ${data.drivers.contentToString()} and shipments: ${data.shipments.contentToString()}")
+                {
+                    Timber.d("Data retrieved")
                 },
                 { e ->
                     Timber.e(e, "Error retrieving data")

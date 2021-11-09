@@ -1,3 +1,5 @@
 <resources>
     <string name="app_name">Driver Shipments</string>
+    <string name="shipment">Shipment: %1$s</string>
+    <string name="suitability">Suitability Score: %1$f</string>
 </resources>

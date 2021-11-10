@@ -3,6 +3,7 @@ package dev.deviouslypatient.drivershipments.model
 import io.reactivex.rxjava3.core.Single
 import timber.log.Timber
 import java.lang.Exception
+import java.util.*
 
 /*
 Thoughts:
@@ -16,9 +17,12 @@ Potential issues with this approach:
 if there are ever drivers with the same name, or shipments with the same destination then only one
 will be considered
  */
+
+//todo break this class up to make it more testable
 class DefaultSuitabilityEngine: SuitabilityEngine {
-     var bestAssignmentsScore: Double = 0.0
-     var bestAssignments: List<Assignment> = listOf()
+    var bestAssignmentsScore: Double = 0.0
+    var bestAssignments: List<Assignment> = listOf()
+    var numberOfPermutationsConsidered = 0
 
     override fun getDriverShipmentAssignments(
         driverNames: List<String>,
@@ -47,7 +51,12 @@ class DefaultSuitabilityEngine: SuitabilityEngine {
         Timber.d("Map of suitability scores $suitabilityMap")
         bestAssignments = emptyList()
         bestAssignmentsScore = 0.0
-        comparePermutations(driverNames, shipmentDestinations, suitabilityMap, emptyList())
+        numberOfPermutationsConsidered = 0
+        comparePermutations(
+            driverNames,
+            shipmentDestinations,
+            suitabilityMap,
+            emptyList())
         Timber.d("Best permutation $bestAssignments  $bestAssignmentsScore")
     }
 
@@ -59,6 +68,7 @@ class DefaultSuitabilityEngine: SuitabilityEngine {
     ) {
         // no more options to consider -  we have a permutation
         if (suitabilityMap.isEmpty() || drivers.isEmpty() || shipments.isEmpty()) {
+            numberOfPermutationsConsidered++
             if (drivers.isNotEmpty()) {
                 // add any drivers who may not have been assigned a shipment
                 drivers.forEach {
@@ -75,27 +85,55 @@ class DefaultSuitabilityEngine: SuitabilityEngine {
         }
 
         // keep building up the assignments in the current permutation of assignments
+
         if (drivers.size > shipments.size) {
+            // if there are more drivers than shipments then every shipment should get an assignment
             val selectedShipment = shipments[0]
             drivers.forEach { driver ->
-                val score = suitabilityMap[Pair(driver, selectedShipment)] ?: 0.0
-                comparePermutations(
-                    drivers.filter { it != driver },
-                    shipments.filter { it != selectedShipment },
-                    suitabilityMap.filter { it.key.first != driver && it.key.second != selectedShipment },
-                    permutationSoFar.plus(Assignment(driver, selectedShipment, score))
-                )
+                // test heuristic
+                var superMax = permutationSoFar.sumOf { it.suitibilityScore }
+                shipments.forEach { shipment ->
+                    // add the max suitability score if each shipment could be assigned to whatever
+                    // driver added the highest score, regardless of if that driver already had one
+                    superMax += Collections.max(suitabilityMap.filter { it.key.second == shipment }.values)
+                }
+                if (superMax <= bestAssignmentsScore) {
+                    // then there no reason to consider permutations along this line
+                    //Timber.v("No need to consider this because current bestComboScore is $bestAssignmentsScore and even the superMax value is $superMax")
+                } else {
+                    val score = suitabilityMap[Pair(driver, selectedShipment)] ?: 0.0
+                    comparePermutations(
+                        drivers.filter { it != driver },
+                        shipments.filter { it != selectedShipment },
+                        suitabilityMap.filter { it.key.first != driver && it.key.second != selectedShipment },
+                        permutationSoFar.plus(Assignment(driver, selectedShipment, score))
+                    )
+                }
             }
         } else {
+            // if there are at least as many shipments as drivers every driver gets an assignment
             val selectedDriver = drivers[0]
             shipments.forEach { shipment ->
-                val score = suitabilityMap[Pair(selectedDriver, shipment)] ?: 0.0
-                comparePermutations(
-                    drivers.filter { it != selectedDriver },
-                    shipments.filter { it != shipment },
-                    suitabilityMap.filter { it.key.first != selectedDriver && it.key.second != shipment },
-                    permutationSoFar.plus(Assignment(selectedDriver, shipment, score))
-                )
+
+                // test heuristic
+                var superMax = permutationSoFar.sumOf { it.suitibilityScore }
+                drivers.forEach { driver ->
+                    // add the max suitability score if each driver could be assigned to whatever
+                    // shipment added the highest score, regardless of if that shipment is taken
+                    superMax += Collections.max(suitabilityMap.filter { it.key.first == driver }.values)
+                }
+                if (superMax <= bestAssignmentsScore) {
+                    // then there no reason to consider permutations along this line
+                    // Timber.v("No need to consider this because current bestComboScore is $bestAssignmentsScore and even the superMax value is $superMax")
+                } else {
+                    val score = suitabilityMap[Pair(selectedDriver, shipment)] ?: 0.0
+                    comparePermutations(
+                        drivers.filter { it != selectedDriver },
+                        shipments.filter { it != shipment },
+                        suitabilityMap.filter { it.key.first != selectedDriver && it.key.second != shipment },
+                        permutationSoFar.plus(Assignment(selectedDriver, shipment, score))
+                    )
+                }
             }
         }
     }

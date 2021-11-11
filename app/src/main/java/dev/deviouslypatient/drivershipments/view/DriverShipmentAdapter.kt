@@ -37,7 +37,7 @@ class DriverShipmentAdapter(
             val context = binding.root.context
             val shipment = assignment.shipment ?: context.getString(R.string.no_shipment)
             binding.shipmentDestination.text = context.getString(R.string.shipment, shipment)
-            val suitability = assignment.suitibilityScore
+            val suitability = assignment.suitabilityScore
             binding.suitabilityScore.text = context.getString(R.string.suitability, suitability)
             binding.root.setOnClickListener {
                 if (binding.shipmentDetails.visibility == View.VISIBLE) {

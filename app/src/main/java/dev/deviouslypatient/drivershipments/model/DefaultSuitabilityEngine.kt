@@ -1,5 +1,6 @@
 package dev.deviouslypatient.drivershipments.model
 
+import androidx.annotation.VisibleForTesting
 import io.reactivex.rxjava3.core.Single
 import timber.log.Timber
 import java.lang.Exception
@@ -14,14 +15,17 @@ once, and whether or not a recursive function was the best idea. If I had more t
 liked to do more research and maybe taken some performance metrics on different approaches.
 
 Potential issues with this approach:
-if there are ever drivers with the same name, or shipments with the same destination then only one
+If there are ever drivers with the same name, or shipments with the same destination then only one
 will be considered
+For very large lists of drivers and/or shipments this could lead to stack overflow issues.
  */
 
-//todo break this class up to make it more testable
 class DefaultSuitabilityEngine: SuitabilityEngine {
+    @VisibleForTesting(otherwise = VisibleForTesting.PRIVATE)
     var bestAssignmentsScore: Double = 0.0
+    @VisibleForTesting(otherwise = VisibleForTesting.PRIVATE)
     var bestAssignments: List<Assignment> = listOf()
+    @VisibleForTesting(otherwise = VisibleForTesting.PRIVATE)
     var numberOfPermutationsConsidered = 0
 
     override fun getDriverShipmentAssignments(
@@ -30,7 +34,20 @@ class DefaultSuitabilityEngine: SuitabilityEngine {
     ): Single<List<Assignment>> {
         return Single.create { emitter ->
             try {
-                calculateSuitabilityMap(driverNames, shipmentDestinations)
+                val suitabilityMap = calculateSuitabilityMap(driverNames, shipmentDestinations)
+                bestAssignments = emptyList()
+                bestAssignmentsScore = 0.0
+                numberOfPermutationsConsidered = 0
+                // longer string lengths generally have more possible factors
+                // longer names also generally have more vowels and consonants
+                // put these first because they are likely to have higher suitability scores
+                calculateBestPermutation(
+                    driverNames.sortedByDescending { it.length },
+                    shipmentDestinations.sortedByDescending { it.length },
+                    suitabilityMap,
+                    emptyList())
+                Timber.d("Number of permutations considered: $numberOfPermutationsConsidered")
+                Timber.d("Best permutation $bestAssignments  $bestAssignmentsScore")
                 emitter.onSuccess(bestAssignments)
             } catch (e: Exception) {
                 Timber.e(e, "Error calculating the most suitable shipment assignments")
@@ -39,7 +56,11 @@ class DefaultSuitabilityEngine: SuitabilityEngine {
         }
     }
 
-    fun calculateSuitabilityMap(driverNames:List<String>, shipmentDestinations: List<String>) {
+    @VisibleForTesting(otherwise = VisibleForTesting.PRIVATE)
+    fun calculateSuitabilityMap(
+        driverNames:List<String>,
+        shipmentDestinations: List<String>
+    ): MutableMap<Pair<String, String>, Double> {
         val suitabilityMap: MutableMap<Pair<String, String>, Double> = mutableMapOf()
 
         driverNames.forEach { driver ->
@@ -49,93 +70,103 @@ class DefaultSuitabilityEngine: SuitabilityEngine {
             }
         }
         Timber.d("Map of suitability scores $suitabilityMap")
-        bestAssignments = emptyList()
-        bestAssignmentsScore = 0.0
-        numberOfPermutationsConsidered = 0
-        comparePermutations(
-            driverNames,
-            shipmentDestinations,
-            suitabilityMap,
-            emptyList())
-        Timber.d("Best permutation $bestAssignments  $bestAssignmentsScore")
+        return suitabilityMap
     }
 
-    private fun comparePermutations(
-        drivers: List<String>,
-        shipments: List<String>,
+    // this is a branching recursive function that determines which set of assignments results in
+    // the highest possible overall suitability score. I'm not a huge fan of it updating
+    // class level variables as it goes, but that saves putting those variables on the stack
+    // I realized while writing tests that I didn't actually have to filter the suitability map
+    // and therefore could have kept it as a class variable, I would love to test how that would
+    // affect memory use and processing time on large data sets
+    @VisibleForTesting(otherwise = VisibleForTesting.PRIVATE)
+    fun calculateBestPermutation(
+        remainingDrivers: List<String>,
+        remainingShipments: List<String>,
         suitabilityMap: Map<Pair<String, String>, Double>,
         permutationSoFar: List<Assignment>
     ) {
-        // no more options to consider -  we have a permutation
-        if (suitabilityMap.isEmpty() || drivers.isEmpty() || shipments.isEmpty()) {
+        // no more options to consider -  we have a completed permutation
+        if (suitabilityMap.isEmpty() || remainingDrivers.isEmpty() || remainingShipments.isEmpty()) {
             numberOfPermutationsConsidered++
-            if (drivers.isNotEmpty()) {
-                // add any drivers who may not have been assigned a shipment
-                drivers.forEach {
-                    permutationSoFar.plus(Assignment(it, null, 0.0))
-                }
-            }
-            val permutationScore = permutationSoFar.sumOf { it.suitibilityScore }
+            val permutationScore = permutationSoFar.sumOf { it.suitabilityScore }
+            Timber.v("Current Permutation $permutationSoFar $permutationScore")
+
             if (permutationScore > bestAssignmentsScore) {
+                // we have a new best permutation
+                // make sure the permutation still includes all drivers
+                if (remainingDrivers.isNotEmpty()) {
+                    remainingDrivers.forEach {
+                        permutationSoFar.plus(Assignment(it, null, 0.0))
+                    }
+                }
                 bestAssignments = permutationSoFar
                 bestAssignmentsScore = permutationScore
             }
-            Timber.d("Current Permutation $permutationSoFar $permutationScore")
             return
         }
 
-        // keep building up the assignments in the current permutation of assignments
+        // heuristic test to see if we should keep considering permutations down this branch
+        if (bestAssignmentsScore >
+            maxPossibleScoreForPermutation(remainingDrivers, remainingShipments, suitabilityMap, permutationSoFar)){
+            return
+        }
 
-        if (drivers.size > shipments.size) {
+        // consider each next possible assignment in the current permutation
+        if (remainingDrivers.size > remainingShipments.size) {
             // if there are more drivers than shipments then every shipment should get an assignment
-            val selectedShipment = shipments[0]
-            drivers.forEach { driver ->
-                // test heuristic
-                var superMax = permutationSoFar.sumOf { it.suitibilityScore }
-                shipments.forEach { shipment ->
-                    // add the max suitability score if each shipment could be assigned to whatever
-                    // driver added the highest score, regardless of if that driver already had one
-                    superMax += Collections.max(suitabilityMap.filter { it.key.second == shipment }.values)
-                }
-                if (superMax <= bestAssignmentsScore) {
-                    // then there no reason to consider permutations along this line
-                    //Timber.v("No need to consider this because current bestComboScore is $bestAssignmentsScore and even the superMax value is $superMax")
-                } else {
-                    val score = suitabilityMap[Pair(driver, selectedShipment)] ?: 0.0
-                    comparePermutations(
-                        drivers.filter { it != driver },
-                        shipments.filter { it != selectedShipment },
-                        suitabilityMap.filter { it.key.first != driver && it.key.second != selectedShipment },
-                        permutationSoFar.plus(Assignment(driver, selectedShipment, score))
-                    )
-                }
+            // create branched permutations for if the next shipment were assigned to each driver
+            val selectedShipment = remainingShipments[0]
+            remainingDrivers.forEach { driver ->
+                val score = suitabilityMap[Pair(driver, selectedShipment)] ?: 0.0
+                calculateBestPermutation(
+                    remainingDrivers.filter { it != driver },
+                    remainingShipments.filter { it != selectedShipment },
+                    suitabilityMap.filter { it.key.first != driver && it.key.second != selectedShipment },
+                    permutationSoFar.plus(Assignment(driver, selectedShipment, score))
+                )
             }
         } else {
             // if there are at least as many shipments as drivers every driver gets an assignment
-            val selectedDriver = drivers[0]
-            shipments.forEach { shipment ->
-
-                // test heuristic
-                var superMax = permutationSoFar.sumOf { it.suitibilityScore }
-                drivers.forEach { driver ->
-                    // add the max suitability score if each driver could be assigned to whatever
-                    // shipment added the highest score, regardless of if that shipment is taken
-                    superMax += Collections.max(suitabilityMap.filter { it.key.first == driver }.values)
-                }
-                if (superMax <= bestAssignmentsScore) {
-                    // then there no reason to consider permutations along this line
-                    // Timber.v("No need to consider this because current bestComboScore is $bestAssignmentsScore and even the superMax value is $superMax")
-                } else {
-                    val score = suitabilityMap[Pair(selectedDriver, shipment)] ?: 0.0
-                    comparePermutations(
-                        drivers.filter { it != selectedDriver },
-                        shipments.filter { it != shipment },
-                        suitabilityMap.filter { it.key.first != selectedDriver && it.key.second != shipment },
-                        permutationSoFar.plus(Assignment(selectedDriver, shipment, score))
-                    )
-                }
+            // create branched permutations for if the next driver were assigned each shipment
+            val selectedDriver = remainingDrivers[0]
+            remainingShipments.forEach { shipment ->
+                val score = suitabilityMap[Pair(selectedDriver, shipment)] ?: 0.0
+                calculateBestPermutation(
+                    remainingDrivers.filter { it != selectedDriver },
+                    remainingShipments.filter { it != shipment },
+                    suitabilityMap.filter { it.key.first != selectedDriver && it.key.second != shipment },
+                    permutationSoFar.plus(Assignment(selectedDriver, shipment, score))
+                )
             }
         }
+    }
+
+    @VisibleForTesting(otherwise = VisibleForTesting.PRIVATE)
+    fun maxPossibleScoreForPermutation(
+        remainingDrivers: List<String>,
+        remainingShipments: List<String>,
+        suitabilityMap: Map<Pair<String, String>, Double>,
+        permutationSoFar: List<Assignment>
+    ): Double {
+        var superMax = permutationSoFar.sumOf { it.suitabilityScore }
+
+        if (suitabilityMap.isEmpty() || remainingDrivers.isEmpty() || remainingShipments.isEmpty()) {
+            return superMax
+        }
+
+        if (remainingDrivers.size > remainingShipments.size) {
+            // add the highest score each shipment could ever possibly contribute
+            remainingShipments.forEach { shipment ->
+                superMax += Collections.max(suitabilityMap.filter { it.key.second == shipment }.values)
+            }
+        } else {
+            // add the highest score each driver could ever possibly contribute
+            remainingDrivers.forEach { driver ->
+                superMax += Collections.max(suitabilityMap.filter { it.key.first == driver }.values)
+            }
+        }
+        return superMax
     }
 
     /*
@@ -147,18 +178,19 @@ class DefaultSuitabilityEngine: SuitabilityEngine {
     If the length of the shipment's destination street name shares any common factors (besides 1)
         with the length of the driver’s name, the SS is increased by 50% above the base SS.
      */
-    private fun calculateSuitabilityScore(driver: String, shipment: String): Double {
+    @VisibleForTesting(otherwise = VisibleForTesting.PRIVATE)
+    fun calculateSuitabilityScore(driver: String, shipment: String): Double {
         val driverVowels = EvaluationFunctions.numberOfVowels(driver)
         val driverConsonants = EvaluationFunctions.numberOfConsonants(driver)
 
-        var baseSuitability = if (shipment.length %2 == 0) {
+        var score = if (shipment.length %2 == 0) {
             driverVowels * 1.5
         } else {
             driverConsonants * 1.0
         }
         if (EvaluationFunctions.greatestCommonDivisor(shipment.length, driver.length) > 1 ) {
-            baseSuitability *= 1.5
+            score *= 1.5
         }
-        return baseSuitability
+        return score
     }
 }

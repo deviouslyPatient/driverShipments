@@ -1,7 +1,7 @@
 package dev.deviouslypatient.drivershipments
 
 import dev.deviouslypatient.drivershipments.model.Assignment
-import dev.deviouslypatient.drivershipments.model.DefaultSuitabilityEngine
+import dev.deviouslypatient.drivershipments.data.DefaultSuitabilityEngine
 import org.junit.Assert.assertEquals
 import org.junit.Test
 

@@ -3,86 +3,58 @@ package dev.deviouslypatient.drivershipments.viewmodel
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.ViewModel
-import dev.deviouslypatient.drivershipments.data.DataService
+import dagger.hilt.android.lifecycle.HiltViewModel
+import dev.deviouslypatient.drivershipments.data.DataRepository
 import dev.deviouslypatient.drivershipments.model.Assignment
-import dev.deviouslypatient.drivershipments.model.SuitabilityEngine
 import io.reactivex.rxjava3.android.schedulers.AndroidSchedulers
 import io.reactivex.rxjava3.disposables.CompositeDisposable
 import io.reactivex.rxjava3.schedulers.Schedulers
 import timber.log.Timber
+import javax.inject.Inject
 
-class DriverViewModel(
-//    val dataRepository: DataRepository,
-    val dataService: DataService,
-    val suitabilityEngine: SuitabilityEngine
-    ): ViewModel() {
+// I'm not sure how much sense it makes to have a data repository and a viewModel in an app with
+// only one view, especially if the model doesn't ever get updated by interactions with the app
+@HiltViewModel
+class DriverViewModel @Inject constructor(private val dataRepository: DataRepository): ViewModel() {
     private val compositeDisposable = CompositeDisposable()
     private val combinations: MutableLiveData<List<Assignment>> by lazy {
-        MutableLiveData<List<Assignment>>().also { getDriversAndShipments() }
+        // todo figure out a better time or way to retrieve data, as that should only need to happen once per day
+        MutableLiveData<List<Assignment>>().also { retrieveData() }
     }
 
     fun getCombinations(): LiveData<List<Assignment>> {
         return combinations
     }
 
-    //todo handle loading and error states for the UI
-    private fun getDriversAndShipments() {
+    // todo handle posting updates for loading and error states
+    private fun retrieveData() {
         compositeDisposable.add(
-            dataService
+            dataRepository
                 .retrieveData()
                 .subscribeOn(Schedulers.io())
                 .observeOn(AndroidSchedulers.mainThread())
-                .subscribe( { result ->
-                    compositeDisposable.add(
-                        suitabilityEngine
-                            .getDriverShipmentAssignments(result.drivers, result.shipments)
-                            .subscribeOn(Schedulers.io())
-                            .observeOn(AndroidSchedulers.mainThread())
-                            .subscribe({ combos ->
-                                combinations.postValue(combos)
-                            },{
-                                Timber.e(it, "Error retrieving most suitable combinations")
-                            })
-                    )
+                .subscribe( {
+                    Timber.d("Data repository retrieved data")
+                    retrieveDriverShipmentAssignments()
                 }, {
                     Timber.e(it, "Error retrieving data")
-                }))
+                })
+        )
     }
 
-//    fun getDrivers(): LiveData<Array<String>> {
-//        return drivers
-//    }
-
-//    // todo figure out a better time or way to retrieve data, as that should only need to happen once per day
-//    private fun retrieveData() {
-//        compositeDisposable.add(
-//            dataRepository
-//                .retrieveData()
-//                .subscribeOn(Schedulers.io())
-//                .observeOn(AndroidSchedulers.mainThread())
-//                .subscribe( {
-//                    Timber.d("Data repository retrieved data")
-//                    retrieveDrivers()
-//                }, {
-//                    Timber.e(it, "Error retrieving data")
-//                })
-//        )
-//    }
-
-//    //todo handle loading and error states for the UI
-//    private fun retrieveDrivers() {
-//        compositeDisposable.add(
-//            dataRepository
-//                .getDrivers()
-//                .subscribeOn(Schedulers.io())
-//                .observeOn(AndroidSchedulers.mainThread())
-//                .subscribe( { result ->
-//                    Timber.d("Data Repository returned drivers $result")
-//                    drivers.postValue(result)
-//                }, {
-//                    Timber.e(it, "Error loading drivers from repository")
-//                }))
-//    }
+    private fun retrieveDriverShipmentAssignments() {
+        compositeDisposable.add(
+            dataRepository
+                .getDriverShipmentAssignments()
+                .subscribeOn(Schedulers.io())
+                .observeOn(AndroidSchedulers.mainThread())
+                .subscribe( { result ->
+                    Timber.d("Data Repository returned drivers $result")
+                    combinations.postValue(result)
+                }, {
+                    Timber.e(it, "Error loading drivers from repository")
+                }))
+    }
 
     override fun onCleared() {
         super.onCleared()

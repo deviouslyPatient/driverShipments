@@ -3,19 +3,22 @@ package dev.deviouslypatient.drivershipments.view
 import androidx.appcompat.app.AppCompatActivity
 import android.os.Bundle
 import android.view.View
-import androidx.lifecycle.ViewModelProvider
+import androidx.activity.viewModels
 import androidx.recyclerview.widget.DividerItemDecoration
 import androidx.recyclerview.widget.LinearLayoutManager
-import dev.deviouslypatient.drivershipments.data.DefaultDataRepository
-import dev.deviouslypatient.drivershipments.data.JsonDataService
+import dagger.hilt.android.AndroidEntryPoint
 import dev.deviouslypatient.drivershipments.databinding.ActivityMainBinding
-import dev.deviouslypatient.drivershipments.model.DefaultSuitabilityEngine
 import dev.deviouslypatient.drivershipments.viewmodel.DriverViewModel
 import dev.deviouslypatient.drivershipments.viewmodel.ViewModelFactory
+import javax.inject.Inject
 
+@AndroidEntryPoint
 class MainActivity : AppCompatActivity() {
+    @Inject
+    lateinit var viewModelFactory: ViewModelFactory
+    private val driverViewModel: DriverViewModel by viewModels { viewModelFactory }
+
     private lateinit var binding: ActivityMainBinding
-    private lateinit var driverViewModel: DriverViewModel
     private lateinit var driverShipmentAdapter: DriverShipmentAdapter
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -24,7 +27,6 @@ class MainActivity : AppCompatActivity() {
         val view = binding.root
         setContentView(view)
         setupUI()
-        setupViewModels()
         setupObservers()
     }
 
@@ -38,17 +40,6 @@ class MainActivity : AppCompatActivity() {
         binding.recyclerView.addItemDecoration(
             DividerItemDecoration(this, linearLayoutManager.orientation)
         )
-    }
-
-    //todo inject the viewmodelfactory
-    private fun setupViewModels() {
-        driverViewModel = ViewModelProvider(
-            this,
-            ViewModelFactory(
-                DefaultDataRepository(JsonDataService(applicationContext)),
-                JsonDataService(applicationContext),
-                DefaultSuitabilityEngine()))
-            .get(DriverViewModel::class.java)
     }
 
     private fun setupObservers() {

@@ -1,5 +1,6 @@
 package dev.deviouslypatient.drivershipments.data
 
+import dev.deviouslypatient.drivershipments.model.Assignment
 import io.reactivex.rxjava3.core.Completable
 import io.reactivex.rxjava3.core.Single
 
@@ -10,4 +11,5 @@ interface DataRepository {
     fun retrieveData(): Completable
     fun getDrivers(): Single<List<String>>
     fun getShipments(): Single<List<String>>
+    fun getDriverShipmentAssignments(): Single<List<Assignment>>
 }

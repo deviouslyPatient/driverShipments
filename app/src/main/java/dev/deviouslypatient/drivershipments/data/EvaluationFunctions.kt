@@ -1,4 +1,4 @@
-package dev.deviouslypatient.drivershipments.model
+package dev.deviouslypatient.drivershipments.data
 
 import kotlin.math.abs
 
@@ -8,11 +8,11 @@ object EvaluationFunctions {
     private val CONSONANTS = listOf('B','C','D','F','G','H','J','K','L','M','N','P','Q','R','S','T','V','W','X','Z')
 
     fun numberOfVowels(input: String?): Int {
-        return input?.trim()?.uppercase()?.filter {VOWELS.contains(it)}?.count() ?: 0
+        return input?.trim()?.uppercase()?.filter { VOWELS.contains(it)}?.count() ?: 0
     }
 
     fun numberOfConsonants(input: String?): Int {
-        return input?.trim()?.uppercase()?.filter {CONSONANTS.contains(it)}?.count() ?: 0
+        return input?.trim()?.uppercase()?.filter { CONSONANTS.contains(it)}?.count() ?: 0
     }
 
     /*

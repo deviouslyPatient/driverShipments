@@ -1,8 +1,8 @@
 package dev.deviouslypatient.drivershipments
 
-import dev.deviouslypatient.drivershipments.model.EvaluationFunctions.greatestCommonDivisor
-import dev.deviouslypatient.drivershipments.model.EvaluationFunctions.numberOfConsonants
-import dev.deviouslypatient.drivershipments.model.EvaluationFunctions.numberOfVowels
+import dev.deviouslypatient.drivershipments.data.EvaluationFunctions.greatestCommonDivisor
+import dev.deviouslypatient.drivershipments.data.EvaluationFunctions.numberOfConsonants
+import dev.deviouslypatient.drivershipments.data.EvaluationFunctions.numberOfVowels
 import org.junit.Assert.assertEquals
 import org.junit.Test
 

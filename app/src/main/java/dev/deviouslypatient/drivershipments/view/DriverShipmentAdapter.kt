@@ -8,6 +8,7 @@ import dev.deviouslypatient.drivershipments.R
 import dev.deviouslypatient.drivershipments.databinding.DriverItemBinding
 import dev.deviouslypatient.drivershipments.model.Assignment
 
+// todo handle empty data list
 class DriverShipmentAdapter(
     private val assignments: ArrayList<Assignment>
 ): RecyclerView.Adapter<DriverShipmentAdapter.DriverShipmentViewHolder>() {

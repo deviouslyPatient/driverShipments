@@ -1,10 +1,10 @@
-package dev.deviouslypatient.drivershipments.model
+package dev.deviouslypatient.drivershipments.data
 
 import androidx.annotation.VisibleForTesting
-import io.reactivex.rxjava3.core.Single
+import dev.deviouslypatient.drivershipments.model.Assignment
 import timber.log.Timber
-import java.lang.Exception
 import java.util.*
+import javax.inject.Inject
 
 /*
 Thoughts:
@@ -20,7 +20,7 @@ will be considered
 For very large lists of drivers and/or shipments this could lead to stack overflow issues.
  */
 
-class DefaultSuitabilityEngine: SuitabilityEngine {
+class DefaultSuitabilityEngine @Inject constructor(): SuitabilityEngine {
     @VisibleForTesting(otherwise = VisibleForTesting.PRIVATE)
     var bestAssignmentsScore: Double = 0.0
     @VisibleForTesting(otherwise = VisibleForTesting.PRIVATE)
@@ -28,32 +28,25 @@ class DefaultSuitabilityEngine: SuitabilityEngine {
     @VisibleForTesting(otherwise = VisibleForTesting.PRIVATE)
     var numberOfPermutationsConsidered = 0
 
-    override fun getDriverShipmentAssignments(
+    override fun calculateDriverShipmentAssignments(
         driverNames: List<String>,
         shipmentDestinations: List<String>
-    ): Single<List<Assignment>> {
-        return Single.create { emitter ->
-            try {
-                val suitabilityMap = calculateSuitabilityMap(driverNames, shipmentDestinations)
-                bestAssignments = emptyList()
-                bestAssignmentsScore = 0.0
-                numberOfPermutationsConsidered = 0
-                // longer string lengths generally have more possible factors
-                // longer names also generally have more vowels and consonants
-                // put these first because they are likely to have higher suitability scores
-                calculateBestPermutation(
-                    driverNames.sortedByDescending { it.length },
-                    shipmentDestinations.sortedByDescending { it.length },
-                    suitabilityMap,
-                    emptyList())
-                Timber.d("Number of permutations considered: $numberOfPermutationsConsidered")
-                Timber.d("Best permutation $bestAssignments  $bestAssignmentsScore")
-                emitter.onSuccess(bestAssignments)
-            } catch (e: Exception) {
-                Timber.e(e, "Error calculating the most suitable shipment assignments")
-                emitter.onError(e)
-            }
-        }
+    ): List<Assignment> {
+        val suitabilityMap = calculateSuitabilityMap(driverNames, shipmentDestinations)
+        bestAssignments = emptyList()
+        bestAssignmentsScore = 0.0
+        numberOfPermutationsConsidered = 0
+        // longer string lengths generally have more possible factors
+        // longer names also generally have more vowels and consonants
+        // put these first because they are likely to have higher suitability scores
+        calculateBestPermutation(
+            driverNames.sortedByDescending { it.length },
+            shipmentDestinations.sortedByDescending { it.length },
+            suitabilityMap,
+            emptyList())
+        Timber.d("Number of permutations considered: $numberOfPermutationsConsidered")
+        Timber.d("Best permutation $bestAssignments  $bestAssignmentsScore")
+        return bestAssignments
     }
 
     @VisibleForTesting(otherwise = VisibleForTesting.PRIVATE)
